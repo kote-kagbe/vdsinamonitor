@@ -1,0 +1,1 @@
+typedef ResultEx = ({bool result, String message});
