@@ -31,7 +31,7 @@ class SQLiteDatabase {
     return await Future<ResultEx>(() async {
       try {
         if(_name.isEmpty) {
-          return (result: false, message: 'DB name is not specified');
+          return (result: false, details: (code: ResultCode.rcError, message: 'DB name is not specified'));
         }
 
         if (_path != null) {
@@ -40,7 +40,7 @@ class SQLiteDatabase {
           }
           bool exists = await Directory(_path!).exists();
           if (!exists) {
-            return (result: false, message: 'DB folder doesn''t exist');
+            return (result: false, details: (code: ResultCode.rcError, message: 'DB folder doesn''t exist'));
           }
         }
 
@@ -54,7 +54,7 @@ class SQLiteDatabase {
           _db = sqlite3.sqlite3.openInMemory();
         } else {
           if(_name.isEmpty) {
-            return (result: false, message: 'DB path is set but DB name is not specified');
+            return (result: false, details: ( code: ResultCode.rcError, message: 'DB path is set but DB name is not specified'));
           }
           _db = sqlite3.sqlite3.open(path.join(_path!, _name));
         }
@@ -73,10 +73,10 @@ class SQLiteDatabase {
           }
         }
 
-        return (result: true, message: 'OK');
+        return (result: true, details: null);
       }
       catch (e) {
-        return (result: false, message: e.toString());
+        return (result: false, details: (code: ResultCode.rcError, message: e.toString()));
       }
     });
   }
@@ -100,7 +100,7 @@ class SQLiteDatabase {
         try {
           File(path.join(_path!, _name)).deleteSync();
         } catch (e) {
-          return (result: false, message: e.toString());
+          return (result: false, details: (code: ResultCode.rcError, message: e.toString()));
         }
       }
       if(convert) {
@@ -109,7 +109,7 @@ class SQLiteDatabase {
           return cnvRes;
         }
       }
-      return (result: true, message: 'OK');
+      return (result: true, details: null);
     });
   }
 
@@ -122,7 +122,7 @@ class SQLiteDatabase {
 
   Future<ResultEx> convertEx () async {
     return await Future<ResultEx>(() {
-      return (result: true, message: 'ok');
+      return (result: true, details: null);
     });
   }
 
