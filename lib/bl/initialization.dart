@@ -2,6 +2,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'dart:ffi';
+import 'dart:async';
 
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:path/path.dart';
@@ -9,30 +10,30 @@ import 'package:path/path.dart';
 import 'package:vdsinamonitor/bl/db.dart';
 import 'package:vdsinamonitor/bl/sqlite/database.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
+import 'package:vdsinamonitor/globals/typedefs.dart';
 
-Future<bool> initialize() async {
-  return await Future<bool>(() async {
-    bool result = true;
+void initialize(Completer completer) async {
+  dataFolder = (await getApplicationSupportDirectory()).path;
 
-    dataFolder = (await getApplicationSupportDirectory()).path;
-
-    if(Platform.isWindows) {
-      String lib = path.join(dataFolder, 'sqlite3.dll');
-      var data = await tryExtractAsset('assets/sql/sqlite3.dll');
-      if(data != null) {
-        var list = data.buffer.asUint8List();
-        await File(lib).writeAsBytes(list);
-      } else {
-        result = false;
-      }
+  if(Platform.isWindows) {
+    String lib = path.join(dataFolder, 'sqlite3.dll');
+    var data = await tryExtractAsset('assets/sql/sqlite3.dll');
+    if(data != null) {
+      var list = data.buffer.asUint8List();
+      await File(lib).writeAsBytes(list);
+    } else {
+      completer.complete((result: false, details: null));
+      return;
     }
+  }
 
-    db = SQLiteDatabase(overrides: <OSOverride>[(os: sqlite_open.OperatingSystem.windows, overrideFunc: _windowsOverride),]);
-    var dbOpenRes = await db.openEx();
-    result = result && dbOpenRes.result;
+  db = SQLiteDatabase(overrides: <OSOverride>[(os: sqlite_open.OperatingSystem.windows, overrideFunc: _windowsOverride),]);
+  if(!(await db.openEx()).result) {
+    completer.complete((result: false, details: null));
+    return;
+  }
 
-    return result;
-  });
+  completer.complete((result: true, details: null));
 }
 
 DynamicLibrary _windowsOverride() {

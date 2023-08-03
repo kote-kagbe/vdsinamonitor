@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
-import 'dart:isolate';
+import 'dart:async';
 
 import 'package:vdsinamonitor/bl/initialization.dart';
 import 'package:vdsinamonitor/ui/accounts/list.dart';
+import 'package:vdsinamonitor/globals/typedefs.dart';
 
 bool firstRun = true;
 
 class SplashWindow extends StatelessWidget {
-  const SplashWindow({super.key});
+  final Completer<ResultEx> _completer;
+  const SplashWindow(Completer<ResultEx> completer, {super.key}):
+    _completer=completer;
 
   @override
   Widget build(BuildContext context) {
     if(firstRun) {
-      initialize().then((_){
+      _completer.future.then((_){
         Navigator.pushReplacement<void, void>(
             context,
             MaterialPageRoute(builder: (_) {
