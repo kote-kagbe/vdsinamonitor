@@ -6,19 +6,19 @@ typedef DBVersion = ({int? version, int? subversion});
 
 const dbVersionKey = 'version';
 const dbSubVersionKey = 'sub_version';
+const dbInfoTable = 'db_info';
 
 class SQLiteDatabaseConverter {
   final Database _db;
-  int? _version,
-      _subVersion;
+  int _version = 0, _subVersion = 0;
 
   SQLiteDatabaseConverter(this._db);
 
   void _prepare() {
     final test = _db.select('''
-      select 1 from [sqlite_master] where [name] = 'db_info' and [type] = 'table'
+      select 1 from [sqlite_master] where [name] = '$dbInfoTable' and [type] = 'table'
     ''');
-    if(test.isNotEmpty) {
+    if (test.isNotEmpty) {
       _getVersion();
     } else {
       _initDB();
@@ -27,27 +27,27 @@ class SQLiteDatabaseConverter {
 
   void _initDB() {
     _db.execute('''
-      create table [db_info] (
+      create table [$dbInfoTable] (
         [id] integer not null primary key,
         [key] text not null,
         [value] text
       ) strict;
     ''');
     _db.execute('''
-      create unique index [ui_db_info_key] on [db_info]([key]);
+      create unique index [ui_db_info_key] on [$dbInfoTable]([key]);
     ''');
     _db.execute('''
-      insert into [db_info] ([key]) values ('$dbVersionKey', '$dbSubVersionKey');
+      insert into [$dbInfoTable] ([key]) values ('$dbVersionKey'), ('$dbSubVersionKey');
     ''');
   }
 
   void _getVersion() {
     final version = _db.select('''
       select 
-        (select [value] from [db_info] where [key] = '$dbVersionKey') [version]
-        , (select [value] from [db_info] where [key] = '$dbSubVersionKey') [sub_version]
+        (select cast([value] as integer) from [$dbInfoTable] where [key] = '$dbVersionKey') [$dbVersionKey]
+        , (select cast([value] as integer) from [$dbInfoTable] where [key] = '$dbSubVersionKey') [$dbSubVersionKey]
     ''');
-    if(version.isNotEmpty) {
+    if (version.isNotEmpty) {
       _version = version[0][dbVersionKey] ?? 0;
       _subVersion = version[0][dbSubVersionKey] ?? 0;
     }
