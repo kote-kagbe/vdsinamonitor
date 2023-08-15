@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
+import 'package:vdsinamonitor/globals/utils.dart';
 
 typedef DBVersion = ({int? version, int? subversion});
 
@@ -10,9 +13,10 @@ const dbInfoTable = 'db_info';
 
 class SQLiteDatabaseConverter {
   final Database _db;
+  final String _dbName;
   int _version = 0, _subVersion = 0;
 
-  SQLiteDatabaseConverter(this._db);
+  SQLiteDatabaseConverter(this._db, this._dbName);
 
   void _prepare() {
     final test = _db.select('''
@@ -55,7 +59,43 @@ class SQLiteDatabaseConverter {
 
   Future<DBVersion> execute() async {
     _prepare();
-    await Future.delayed(const Duration(seconds: 1));
+
+    ByteData? code;
+    do {
+      String subConverter = '$_dbName.$_version.$_subVersion.sql';
+      code = await tryExtractAsset(subConverter);
+      if(code != null){
+        _applyConverter(code);
+      } else {
+        String converter = '$_dbName.$_version.sql';
+        code = await tryExtractAsset(converter);
+        if(code != null){
+          _applyConverter(code);
+        }
+      }
+    } while(code != null);
+
     return (version: _version, subversion: _subVersion);
+  }
+
+  void _applyConverter(ByteData code) {
+
+  }
+
+  void _setVersion({int? version, int? subVersion}) {
+    if(version != null) {
+      _db.execute('''
+        insert into [$dbInfoTable] ([key], [value]) values ($dbVersionKey, $version)
+        on conflict [key] do update set [value] = excluded.value
+      ''');
+      _version = version;
+    }
+    if(subVersion != null) {
+      _db.execute('''
+        insert into [$dbInfoTable] ([key], [value]) values ($dbSubVersionKey, $subVersion)
+        on conflict [key] do update set [value] = excluded.value
+      ''');
+      _subVersion = subVersion;
+    }
   }
 }
