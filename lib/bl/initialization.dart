@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'dart:ffi';
 import 'dart:async';
-
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:path/path.dart';
 
@@ -14,11 +13,12 @@ import 'package:vdsinamonitor/globals/typedefs.dart';
 
 void initialize(Completer completer) async {
   dataFolder = (await getApplicationSupportDirectory()).path;
+  tempFolder = (await getTemporaryDirectory()).path;
 
-  if(Platform.isWindows) {
+  if (Platform.isWindows) {
     String lib = path.join(dataFolder, 'sqlite3.dll');
-    var data = await tryExtractAsset('assets/sql/sqlite3.dll');
-    if(data != null) {
+    var data = await tryExtractAsset('/sqlite/sqlite3.dll');
+    if (data != null) {
       var list = data.buffer.asUint8List();
       await File(lib).writeAsBytes(list);
     } else {
@@ -27,8 +27,14 @@ void initialize(Completer completer) async {
     }
   }
 
-  db = SQLiteDatabase(overrides: <OSOverride>[(os: sqlite_open.OperatingSystem.windows, overrideFunc: _windowsOverride),]);
-  if(!(await db.openEx()).result) {
+  db = SQLiteDatabase(
+    overrides: <OSOverride>[
+      (os: sqlite_open.OperatingSystem.windows, overrideFunc: _windowsOverride),
+    ],
+    path: null,
+    name: 'vdsinamonitor.db',
+  );
+  if (!(await db.openEx()).result) {
     completer.complete((result: false, details: null));
     return;
   }

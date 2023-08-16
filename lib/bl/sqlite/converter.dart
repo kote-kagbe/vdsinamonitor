@@ -1,6 +1,12 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:vdsinamonitor/bl/db.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
@@ -15,6 +21,7 @@ class SQLiteDatabaseConverter {
   final Database _db;
   final String _dbName;
   int _version = 0, _subVersion = 0;
+  final _executed = <String>{};
 
   SQLiteDatabaseConverter(this._db, this._dbName);
 
@@ -62,35 +69,66 @@ class SQLiteDatabaseConverter {
 
     ByteData? code;
     do {
-      String subConverter = '$_dbName.$_version.$_subVersion.sql';
+      String subConverter = '/sqlite/$_dbName.$_version.$_subVersion.sql';
+      if (_executed.contains(subConverter)) {
+        throw Exception('Зацикливание конвертации на конвертере $subConverter');
+      }
       code = await tryExtractAsset(subConverter);
-      if(code != null){
-        _applyConverter(code);
+      if (code != null) {
+        await _applyConverter(code);
+        _executed.add(subConverter);
       } else {
-        String converter = '$_dbName.$_version.sql';
+        String converter = '/sqlite/$_dbName.$_version.sql';
+        if (_executed.contains(converter)) {
+          throw Exception('Зацикливание конвертации на конвертере $converter');
+        }
         code = await tryExtractAsset(converter);
-        if(code != null){
-          _applyConverter(code);
+        if (code != null) {
+          await _applyConverter(code);
+          _executed.add(converter);
         }
       }
-    } while(code != null);
+    } while (code != null);
 
     return (version: _version, subversion: _subVersion);
   }
 
-  void _applyConverter(ByteData code) {
+  Future<void> _applyConverter(ByteData code) async {
+    final Completer<void> completer = Completer();
+    if (Platform.isWindows) {
+      // под виндой не работает transform(utf8.decoder), ругается на кириллицу
+      // а вот читает из файла без ошибок, зараза
+      final codeFile = File(path.join(tempFolder, _dbName));
+      await codeFile.writeAsBytes(
+          code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
+      final lines = await codeFile.readAsLines();
+      for (final line in lines) {
+        final s = line;
+      }
+      codeFile.delete();
+      completer.complete();
+    } else {
+      final Stream<List<int>> codeStream = Stream.fromIterable(
+          [code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes)]);
+      codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
+          (String line) {
+        final s = line;
+        assert(s.isNotEmpty);
+      }, onDone: () => completer.complete());
+    }
 
+    return completer.future;
   }
 
   void _setVersion({int? version, int? subVersion}) {
-    if(version != null) {
+    if (version != null) {
       _db.execute('''
         insert into [$dbInfoTable] ([key], [value]) values ($dbVersionKey, $version)
         on conflict [key] do update set [value] = excluded.value
       ''');
       _version = version;
     }
-    if(subVersion != null) {
+    if (subVersion != null) {
       _db.execute('''
         insert into [$dbInfoTable] ([key], [value]) values ($dbSubVersionKey, $subVersion)
         on conflict [key] do update set [value] = excluded.value
