@@ -95,27 +95,38 @@ class SQLiteDatabaseConverter {
 
   Future<void> _applyConverter(ByteData code) async {
     final Completer<void> completer = Completer();
-    if (Platform.isWindows) {
-      // под виндой не работает transform(utf8.decoder), ругается на кириллицу
-      // а вот читает из файла без ошибок, зараза
-      final codeFile = File(path.join(tempFolder, _dbName));
-      await codeFile.writeAsBytes(
-          code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
-      final lines = await codeFile.readAsLines();
-      for (final line in lines) {
-        final s = line;
-      }
-      codeFile.delete();
-      completer.complete();
-    } else {
-      final Stream<List<int>> codeStream = Stream.fromIterable(
-          [code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes)]);
-      codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
-          (String line) {
-        final s = line;
-        assert(s.isNotEmpty);
-      }, onDone: () => completer.complete());
+
+    final codeFile = File(path.join(tempFolder, _dbName));
+    await codeFile.writeAsBytes(
+        code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
+    final lines = await codeFile.readAsLines();
+    codeFile.delete();
+    for (final line in lines) {
+      final s = line;
     }
+    completer.complete();
+
+    // if (Platform.isWindows) {
+    //   // под виндой не работает transform(utf8.decoder), ругается на кириллицу
+    //   // а вот читает из файла без ошибок, зараза
+    //   final codeFile = File(path.join(tempFolder, _dbName));
+    //   await codeFile.writeAsBytes(
+    //       code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
+    //   final lines = await codeFile.readAsLines();
+    //   for (final line in lines) {
+    //     final s = line;
+    //   }
+    //   codeFile.delete();
+    //   completer.complete();
+    // } else {
+    //   final Stream<List<int>> codeStream = Stream.fromIterable(
+    //       [code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes)]);
+    //   codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
+    //       (String line) {
+    //     final s = line;
+    //     assert(s.isNotEmpty);
+    //   }, onDone: () => completer.complete());
+    // }
 
     return completer.future;
   }

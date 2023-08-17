@@ -87,6 +87,8 @@ class SQLiteDatabase {
           }
         }
 
+        _db?.execute('PRAGMA foreign_keys = ON;');
+
         return (result: true, details: null);
       } catch (e) {
         return (
