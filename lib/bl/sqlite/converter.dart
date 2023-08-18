@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
@@ -97,8 +98,8 @@ class SQLiteDatabaseConverter {
     final Completer<void> completer = Completer();
 
     final codeFile = File(path.join(tempFolder, _dbName));
-    await codeFile.writeAsBytes(
-        code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
+    // await codeFile.writeAsBytes(
+    //     code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
     // final lines = await codeFile.readAsLines();
     // codeFile.delete();
     // for (final line in lines) {
@@ -106,12 +107,27 @@ class SQLiteDatabaseConverter {
     // }
 
     // Stream<List<int>> codeStream = codeFile.openRead();
-    final Stream<List<int>> codeStream = Stream.fromIterable(
-        [code.buffer.asUint8List(code.offsetInBytes, code.lengthInBytes)]);
-    codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
-        (String line) {
-      final s = line;
-    }, onDone: () => completer.complete());
+    try {
+      // final Stream<int> codeStream =
+      //     Stream.fromIterable(code.buffer.asUint8List());
+      // codeStream
+      //     .transform(StreamTransformer.fromHandlers(
+      //         handleData: (int data, EventSink<List<int>> sink) =>
+      //             sink.add(<int>[data])))
+      final sink = codeFile.openWrite();
+
+      partGenerator(code.buffer.asUint8List())
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((String line) {
+        sink.writeln(line);
+      }, onDone: () {
+        sink.close();
+        completer.complete();
+      });
+    } catch (e) {
+      final s = '$e';
+    }
 
     // completer.complete();
 
@@ -155,5 +171,14 @@ class SQLiteDatabaseConverter {
       ''');
       _subVersion = subVersion;
     }
+  }
+}
+
+Stream<List<int>> partGenerator(Uint8List list) async* {
+  var offset = 0;
+  const partSize = 100;
+  while (offset < list.length) {
+    yield list.sublist(offset, min(list.length, offset + partSize));
+    offset += partSize;
   }
 }
