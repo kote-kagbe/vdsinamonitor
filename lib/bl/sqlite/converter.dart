@@ -99,12 +99,21 @@ class SQLiteDatabaseConverter {
     final codeFile = File(path.join(tempFolder, _dbName));
     await codeFile.writeAsBytes(
         code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
-    final lines = await codeFile.readAsLines();
-    codeFile.delete();
-    for (final line in lines) {
+    // final lines = await codeFile.readAsLines();
+    // codeFile.delete();
+    // for (final line in lines) {
+    //   final s = line;
+    // }
+
+    // Stream<List<int>> codeStream = codeFile.openRead();
+    final Stream<List<int>> codeStream = Stream.fromIterable(
+        [code.buffer.asUint8List(code.offsetInBytes, code.lengthInBytes)]);
+    codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
+        (String line) {
       final s = line;
-    }
-    completer.complete();
+    }, onDone: () => completer.complete());
+
+    // completer.complete();
 
     // if (Platform.isWindows) {
     //   // под виндой не работает transform(utf8.decoder), ругается на кириллицу
