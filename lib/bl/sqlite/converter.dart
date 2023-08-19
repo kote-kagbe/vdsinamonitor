@@ -91,7 +91,7 @@ class SQLiteDatabaseConverter {
     return (version: _version, subversion: _subVersion);
   }
 
-  Future<ResultEx> _applyConverter(ByteData code) async {
+  Future<ResultEx> _applyConverter(ByteData code) {
     final Completer<ResultEx> completer = Completer();
 
     int counter = 1;
@@ -99,55 +99,57 @@ class SQLiteDatabaseConverter {
     final Map<String, dynamic> paramList = {};
     QueryParams? params;
 
-    try {
-      _db.execute('begin exclusive transaction');
+    _db.execute('begin exclusive transaction');
 
-      _parseCode(code.buffer.asUint8List())
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())
-      .listen((String line) {
-          if(line.startsWith('@') && request.isEmpty) {
-            _processMacros(line.substring(1), counter);
-            counter += 1;
-          } else if(line.startsWith(r'$') && request.isEmpty) {
-            params = _processParams(paramList, line.substring(1), counter, params);
-            counter += 1;
-          } else if(line.isEmpty && request.isNotEmpty) {
-            String query = request.join('\n');
-            if(params == null) {
-              _db.execute(query);
-            } else {
-              List<dynamic> args = [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)];
-              Map<String, String>? param = params?.extract;
-              if(param != null) {
-                final result = _db.select(query, args);
-                for(final pair in param.entries) {
-                  paramList[pair.key] = result.isNotEmpty ? result[0][pair.value] : null;
-                }
-              } else {
-                _db.execute(query, args);
-              }
-            }
-            request.clear();
-            params = null;
-            counter += 1;
+    final subscription = _parseCode(code.buffer.asUint8List())
+    .transform(utf8.decoder)
+    .transform(const LineSplitter())
+    .listen(null);
+    subscription.onDone(() {
+      if(request.isNotEmpty) {
+        _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
+      }
+      _db.execute('commit transaction');
+      completer.complete((result: true, details: null));
+    });
+    subscription.onData((String line) {
+      try {
+        if(line.startsWith('@') && request.isEmpty) {
+          _processMacros(line.substring(1), counter);
+          counter += 1;
+        } else if(line.startsWith(r'$') && request.isEmpty) {
+          params = _processParams(paramList, line.substring(1), counter, params);
+          counter += 1;
+        } else if(line.isEmpty && request.isNotEmpty) {
+          String query = request.join('\n');
+          if(params == null) {
+            _db.execute(query);
           } else {
-            if(line.trim().isNotEmpty) {
-              request.add(line);
+            List<dynamic> args = [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)];
+            Map<String, String>? param = params?.extract;
+            if(param != null) {
+              final result = _db.select(query, args);
+              for(final pair in param.entries) {
+                paramList[pair.key] = result.isNotEmpty ? result[0][pair.value] : null;
+              }
+            } else {
+              _db.execute(query, args);
             }
           }
-      }, onDone: () {
-        if(request.isNotEmpty) {
-          _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
+          request.clear();
+          params = null;
+          counter += 1;
+        } else {
+          if(line.trim().isNotEmpty) {
+            request.add(line);
+          }
         }
-        _db.execute('commit transaction');
-        completer.complete((result: true, details: null));
-      });
-      
-    } catch (e) {
-      _db.execute('rollback transaction');
-      throw Exception('Ошибка применения конвертера: $e');
-    }
+      } catch (e) {
+        _db.execute('rollback transaction');
+        subscription.cancel();
+        completer.completeError((result: false, details: (code: null, message: 'Ошибка применения конвертера: $e')));
+      }
+    });
 
     return completer.future;
   }

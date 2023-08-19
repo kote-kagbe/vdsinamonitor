@@ -3,5 +3,5 @@ enum ResultCode {
   rcWarning,
   rcError,
 }
-typedef ResultDetails = ({ResultCode code, String? message});
+typedef ResultDetails = ({ResultCode? code, String? message});
 typedef ResultEx = ({bool result, ResultDetails? details});
