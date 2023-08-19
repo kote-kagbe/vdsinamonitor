@@ -1,18 +1,15 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
-import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:vdsinamonitor/bl/db.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
 
 typedef DBVersion = ({int? version, int? subversion});
+typedef QueryParams = ({Map<String, String>? extract, List<String>? apply});
 
 const dbVersionKey = 'version';
 const dbSubVersionKey = 'sub_version';
@@ -22,7 +19,6 @@ class SQLiteDatabaseConverter {
   final Database _db;
   final String _dbName;
   int _version = 0, _subVersion = 0;
-  final _executed = <String>{};
 
   SQLiteDatabaseConverter(this._db, this._dbName);
 
@@ -69,24 +65,25 @@ class SQLiteDatabaseConverter {
     _prepare();
 
     ByteData? code;
+    final executed = <String>{};
     do {
       String subConverter = '/sqlite/$_dbName.$_version.$_subVersion.sql';
-      if (_executed.contains(subConverter)) {
+      if (executed.contains(subConverter)) {
         throw Exception('Зацикливание конвертации на конвертере $subConverter');
       }
       code = await tryExtractAsset(subConverter);
       if (code != null) {
         await _applyConverter(code);
-        _executed.add(subConverter);
+        executed.add(subConverter);
       } else {
         String converter = '/sqlite/$_dbName.$_version.sql';
-        if (_executed.contains(converter)) {
+        if (executed.contains(converter)) {
           throw Exception('Зацикливание конвертации на конвертере $converter');
         }
         code = await tryExtractAsset(converter);
         if (code != null) {
           await _applyConverter(code);
-          _executed.add(converter);
+          executed.add(converter);
         }
       }
     } while (code != null);
@@ -94,91 +91,141 @@ class SQLiteDatabaseConverter {
     return (version: _version, subversion: _subVersion);
   }
 
-  Future<void> _applyConverter(ByteData code) async {
-    final Completer<void> completer = Completer();
+  Future<ResultEx> _applyConverter(ByteData code) async {
+    final Completer<ResultEx> completer = Completer();
 
-    final codeFile = File(path.join(tempFolder, _dbName));
-    // await codeFile.writeAsBytes(
-    //     code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
-    // final lines = await codeFile.readAsLines();
-    // codeFile.delete();
-    // for (final line in lines) {
-    //   final s = line;
-    // }
+    int counter = 1;
+    final List<String> request = [];
+    final Map<String, dynamic> paramList = {};
+    QueryParams? params;
 
-    // Stream<List<int>> codeStream = codeFile.openRead();
     try {
-      // final Stream<int> codeStream =
-      //     Stream.fromIterable(code.buffer.asUint8List());
-      // codeStream
-      //     .transform(StreamTransformer.fromHandlers(
-      //         handleData: (int data, EventSink<List<int>> sink) =>
-      //             sink.add(<int>[data])))
-      final sink = codeFile.openWrite();
+      _db.execute('begin exclusive transaction');
 
-      partGenerator(code.buffer.asUint8List())
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((String line) {
-        sink.writeln(line);
+      _parseCode(code.buffer.asUint8List())
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((String line) {
+          if(line.startsWith('@') && request.isEmpty) {
+            _processMacros(line.substring(1), counter);
+            counter += 1;
+          } else if(line.startsWith(r'$') && request.isEmpty) {
+            params = _processParams(paramList, line.substring(1), counter, params);
+            counter += 1;
+          } else if(line.isEmpty && request.isNotEmpty) {
+            String query = request.join('\n');
+            if(params == null) {
+              _db.execute(query);
+            } else {
+              List<dynamic> args = [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)];
+              Map<String, String>? param = params?.extract;
+              if(param != null) {
+                final result = _db.select(query, args);
+                for(final pair in param.entries) {
+                  paramList[pair.key] = result.isNotEmpty ? result[0][pair.value] : null;
+                }
+              } else {
+                _db.execute(query, args);
+              }
+            }
+            request.clear();
+            params = null;
+            counter += 1;
+          } else {
+            if(line.trim().isNotEmpty) {
+              request.add(line);
+            }
+          }
       }, onDone: () {
-        sink.close();
-        completer.complete();
+        if(request.isNotEmpty) {
+          _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
+        }
+        _db.execute('commit transaction');
+        completer.complete((result: true, details: null));
       });
+      
     } catch (e) {
-      final s = '$e';
+      _db.execute('rollback transaction');
+      throw Exception('Ошибка применения конвертера: $e');
     }
 
-    // completer.complete();
-
-    // if (Platform.isWindows) {
-    //   // под виндой не работает transform(utf8.decoder), ругается на кириллицу
-    //   // а вот читает из файла без ошибок, зараза
-    //   final codeFile = File(path.join(tempFolder, _dbName));
-    //   await codeFile.writeAsBytes(
-    //       code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes));
-    //   final lines = await codeFile.readAsLines();
-    //   for (final line in lines) {
-    //     final s = line;
-    //   }
-    //   codeFile.delete();
-    //   completer.complete();
-    // } else {
-    //   final Stream<List<int>> codeStream = Stream.fromIterable(
-    //       [code.buffer.asInt8List(code.offsetInBytes, code.lengthInBytes)]);
-    //   codeStream.transform(utf8.decoder).transform(const LineSplitter()).listen(
-    //       (String line) {
-    //     final s = line;
-    //     assert(s.isNotEmpty);
-    //   }, onDone: () => completer.complete());
-    // }
-
     return completer.future;
+  }
+
+  QueryParams _processParams(Map<String, dynamic> paramList, String macros, int counter, QueryParams? update) {
+    List<String> parts = macros.split(' ');
+    if(parts.length < 2) {
+      throw Exception('Неверный синтаксис макроса $macros #$counter');
+    }
+    switch (parts[0]) {
+      case '<': {
+        final Map<String, String> extract = {};
+        for(final param in parts.sublist(1)) {
+          final List<String> data = param.split(':');
+          extract[data[0]] = data.length > 1 ? data[1] : data[0];
+        }
+        return (extract: extract, apply: update?.apply);
+      }
+      case '>': {
+        parts.sublist(1).forEach((el) {
+          if(!paramList.containsKey(el)) {
+            throw Exception('Не найден параметр $el макроса $macros #$counter');
+          }
+        });
+        return (apply: parts.sublist(1), extract: update?.extract);
+      }
+      default: throw Exception('Неизвестный макрос $macros #$counter');
+    }
+  }
+
+  void _processMacros(String macros, int counter) {
+    final List<String> parts = macros.split(' ');
+    if(parts.isEmpty) {
+      throw Exception('Пустое тело макроса $macros');
+    }
+    switch (parts[0]) {
+      case 'set': {
+        if(parts.length != 3) {
+          throw Exception('Неверное количество аргументов для макроса $macros #$counter');
+        }
+        int? value = int.tryParse(parts[2]);
+        if(value == null) {
+          throw Exception('Неверное значение аргумента ${parts[2]} макроса $macros #$counter');
+        }
+        switch (parts[1]) {
+          case 'version': _setVersion(version: value);
+          case 'subversion': _setVersion(subVersion: value);
+          default: throw Exception('Неверное значение аргумента ${parts[1]} макроса $macros #$counter');
+        }
+      }
+      default:
+        throw Exception('Неизвестный макрос $macros #$counter');
+    }
+  }
+
+  Stream<List<int>> _parseCode(Uint8List list) async* {
+    var offset = 0;
+    const partSize = 1024;
+    while (offset < list.length) {
+      yield list.sublist(offset, min(list.length, offset + partSize));
+      offset += partSize;
+    }
   }
 
   void _setVersion({int? version, int? subVersion}) {
     if (version != null) {
       _db.execute('''
-        insert into [$dbInfoTable] ([key], [value]) values ($dbVersionKey, $version)
-        on conflict [key] do update set [value] = excluded.value
-      ''');
+        insert into [$dbInfoTable] ([key], [value]) values (?1, ?2)
+        on conflict ([key]) do update set [value] = excluded.value
+      ''', [dbVersionKey, version]);
       _version = version;
     }
     if (subVersion != null) {
       _db.execute('''
-        insert into [$dbInfoTable] ([key], [value]) values ($dbSubVersionKey, $subVersion)
-        on conflict [key] do update set [value] = excluded.value
-      ''');
+        insert into [$dbInfoTable] ([key], [value]) values (?1, ?2)
+        on conflict ([key]) do update set [value] = excluded.value
+      ''', [dbSubVersionKey, subVersion]);
       _subVersion = subVersion;
     }
-  }
-}
-
-Stream<List<int>> partGenerator(Uint8List list) async* {
-  var offset = 0;
-  const partSize = 100;
-  while (offset < list.length) {
-    yield list.sublist(offset, min(list.length, offset + partSize));
-    offset += partSize;
   }
 }

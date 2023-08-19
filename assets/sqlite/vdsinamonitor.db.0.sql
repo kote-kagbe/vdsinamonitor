@@ -1,7 +1,14 @@
+-- установить версию БД: @set version N:int
+-- установить подверсию БД: @set subversion N:int
+-- извлечь из запроса поля: $< param_name:field_name, ...
+--   данные извлекутся из первой записи, если записи или поля нет, то значением параметра будет null
+-- установить аргумент запроса из извлечённых ранее: $> param_name, ...
+--   параметр обязательно должен быть сохранён ранее через $<
+
 create table [options] ( -- кастомные опции с уникальными именами
     [id] integer not null primary key,
     [key] text not null, -- уникальный ключ опции
-    [value] blob -- значение опции
+    [value] text -- значение опции
 ) strict;
 
 create unique index [ui_options_key] on [options]([key]);
@@ -26,13 +33,13 @@ create unique index [ui_accounts_remote_id] on [accounts]([remote_id]);
 create table [account_balances] ( -- список балансов аккаунта
     [id] integer not null primary key,
     [account] integer not null references [accounts]([id]) on update cascade on delete cascade
-
+--
 ) strict;
 
 create table [tariff_groups] ( -- список групп тарифов
     [id] integer not null primary key,
     [remote_id] integer not null -- удалённый ключ
-
+--
 ) strict;
 
 create unique index [ui_tariff_groups_remote_id] on [tariff_groups]([remote_id]);
@@ -143,3 +150,5 @@ create unique index [ui_balance_stats_remote_id] on [balance_stats]([remote_id])
 create index [i_balance_stats_created] on [balance_stats]([created] desc);
 
 create index [i_balance_stats_updated] on [balance_stats]([updated] desc);
+
+@set version 1
