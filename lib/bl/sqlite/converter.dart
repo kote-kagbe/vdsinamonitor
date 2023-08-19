@@ -104,7 +104,11 @@ class SQLiteDatabaseConverter {
     final subscription = _parseCode(code.buffer.asUint8List())
     .transform(utf8.decoder)
     .transform(const LineSplitter())
-    .listen(null);
+    .listen(null, cancelOnError: true);
+    subscription.onError((e) {
+      _db.execute('rollback transaction');
+      completer.completeError((result: false, details: (code: null, message: 'Ошибка чтения конвертера: $e')));
+    });
     subscription.onDone(() {
       if(request.isNotEmpty) {
         _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
