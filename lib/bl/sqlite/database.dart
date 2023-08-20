@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +16,9 @@ typedef OSOverride = ({
   DynamicLibrary Function() overrideFunc
 });
 
+typedef TransactionMethod<T> = Future<T> Function();
+typedef TransactionBlock<T> = ({Completer<T> completer, TransactionMethod<T> method, String transactionType});
+
 class SQLiteDatabase {
   sqlite3.Database? _db;
   String? _path;
@@ -21,9 +26,7 @@ class SQLiteDatabase {
   final bool _convert;
   final bool _reset;
   final List<OSOverride>? _overrides;
-  bool _isUnderTransaction = false;
-
-  bool get isUnderTransaction => _isUnderTransaction;
+  final Queue<TransactionBlock> _transactionQueue = Queue<TransactionBlock>();
 
   SQLiteDatabase({
     String? path = '',
@@ -200,39 +203,38 @@ class SQLiteDatabase {
     return null;
   }
 
-  bool beginTransaction({String transactionType = 'deferred'}) {
-    try {
-      if(!isUnderTransaction) {
-        execute('begin $transactionType transaction');
-        _isUnderTransaction = true;
-      }
-    } catch (_) {
-      _isUnderTransaction = false;
+  Future<T> underTransaction<T>(TransactionMethod<T> method, [String transactionType = 'deferred']) {
+    final Completer<T> completer = Completer<T>();
+    _transactionQueue.addLast((completer: completer, method: method, transactionType: transactionType));
+    if(_transactionQueue.length == 1) {
+      _processTransactionQueue<T>();
     }
-    return isUnderTransaction;
+    return completer.future;
   }
 
-  bool commit() {
-    try {
-      if(isUnderTransaction) {
-        execute('commit transaction');
-        _isUnderTransaction = false;
+  void _processTransactionQueue<T>() async {
+    if(_transactionQueue.isNotEmpty) {
+      final item = _transactionQueue.first;
+      if(_db != null) {
+        _db?.execute('begin ${item.transactionType} transaction');
+        item.method()
+          .then((methodResult) {
+            _db?.execute('commit transaction');
+            item.completer.complete(methodResult);
+            _transactionQueue.removeFirst();
+            _processTransactionQueue();
+          })
+          .catchError((methodError) {
+            _db?.execute('rollback transaction');
+            item.completer.completeError(methodError);
+            _transactionQueue.removeFirst();
+            _processTransactionQueue();
+          });
+      } else {
+        item.completer.completeError('База данных не подключена');
+        _transactionQueue.removeFirst();
+        _processTransactionQueue();
       }
-    } catch (_) {
-      _isUnderTransaction = false;
     }
-    return isUnderTransaction;
-  }
-
-  bool rollback() {
-    try {
-      if(isUnderTransaction) {
-        execute('rollback transaction');
-        _isUnderTransaction = false;
-      }
-    } catch (_) {
-      _isUnderTransaction = false;
-    }
-    return isUnderTransaction;
   }
 }
