@@ -202,8 +202,10 @@ class SQLiteDatabase {
 
   bool beginTransaction({String transactionType = 'deferred'}) {
     try {
-      execute('begin $transactionType transaction');
-      _isUnderTransaction = true;
+      if(!isUnderTransaction) {
+        execute('begin $transactionType transaction');
+        _isUnderTransaction = true;
+      }
     } catch (_) {
       _isUnderTransaction = false;
     }
@@ -212,8 +214,10 @@ class SQLiteDatabase {
 
   bool commit() {
     try {
-      execute('commit transaction');
-      _isUnderTransaction = false;
+      if(isUnderTransaction) {
+        execute('commit transaction');
+        _isUnderTransaction = false;
+      }
     } catch (_) {
       _isUnderTransaction = false;
     }
@@ -222,8 +226,10 @@ class SQLiteDatabase {
 
   bool rollback() {
     try {
-      execute('rollback transaction');
-      _isUnderTransaction = false;
+      if(isUnderTransaction) {
+        execute('rollback transaction');
+        _isUnderTransaction = false;
+      }
     } catch (_) {
       _isUnderTransaction = false;
     }
