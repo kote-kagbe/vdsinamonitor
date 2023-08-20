@@ -203,7 +203,11 @@ class SQLiteDatabase {
     return null;
   }
 
-  Future<T> underTransaction<T>(TransactionMethod<T> method, [String transactionType = 'deferred']) {
+  Future<T> withTransaction<T>({required TransactionMethod<T> method, String transactionType = 'DEFERRED'}) {
+    const transactionTypes = <String>['DEFERRED', 'IMMEDIATE', 'EXCLUSIVE '];
+    if(!transactionTypes.any((element) => element == transactionType.toUpperCase())) {
+      throw Exception('Транзакция должна иметь один из этих типов: ${transactionTypes.join(', ')}');
+    }
     final Completer<T> completer = Completer<T>();
     _transactionQueue.addLast((completer: completer, method: method, transactionType: transactionType));
     if(_transactionQueue.length == 1) {
