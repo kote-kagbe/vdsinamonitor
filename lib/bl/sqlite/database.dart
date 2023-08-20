@@ -16,7 +16,7 @@ typedef OSOverride = ({
   DynamicLibrary Function() overrideFunc
 });
 
-typedef TransactionMethod<T> = Future<T> Function();
+typedef TransactionMethod<T> = T Function();
 typedef TransactionBlock<T> = ({Completer<T> completer, TransactionMethod<T> method, String transactionType});
 
 class SQLiteDatabase {
@@ -222,20 +222,16 @@ class SQLiteDatabase {
       if(_db != null) {
         Future<void>(() {
           _db?.execute('begin ${item.transactionType} transaction');
-        }).then((_) {
-          item.method()
-            .then((methodResult) {
-              _db?.execute('commit transaction');
-              item.completer.complete(methodResult);
-              _transactionQueue.removeFirst();
-              _processTransactionQueue();
-            })
-            .catchError((methodError) {
-              _db?.execute('rollback transaction');
-              item.completer.completeError(methodError);
-              _transactionQueue.removeFirst();
-              _processTransactionQueue();
-            });
+          try {
+            final T methodResult = item.method();
+            _db?.execute('commit transaction');
+            item.completer.complete(methodResult);
+          } catch (methodError) {
+            _db?.execute('rollback transaction');
+            item.completer.completeError(methodError);
+          }
+          _transactionQueue.removeFirst();
+          _processTransactionQueue();
         }).catchError((e) {
           item.completer.completeError('Не удалось создать транзакцию: $e');
           _transactionQueue.removeFirst();
