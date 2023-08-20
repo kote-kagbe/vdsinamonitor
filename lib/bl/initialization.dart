@@ -9,7 +9,6 @@ import 'package:path/path.dart';
 import 'package:vdsinamonitor/bl/db.dart';
 import 'package:vdsinamonitor/bl/sqlite/database.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
-import 'package:vdsinamonitor/globals/typedefs.dart';
 
 void initialize(Completer completer) async {
   dataFolder = (await getApplicationSupportDirectory()).path;
@@ -22,7 +21,7 @@ void initialize(Completer completer) async {
       var list = data.buffer.asUint8List();
       await File(lib).writeAsBytes(list);
     } else {
-      completer.complete((result: false, details: null));
+      completer.complete(resultEx(false));
       return;
     }
   }
@@ -35,11 +34,11 @@ void initialize(Completer completer) async {
     name: 'vdsinamonitor.db',
   );
   if (!(await db.openEx()).result) {
-    completer.complete((result: false, details: null));
+    completer.complete(resultEx(false));
     return;
   }
 
-  completer.complete((result: true, details: null));
+  completer.complete(resultEx(true));
 }
 
 DynamicLibrary _windowsOverride() {

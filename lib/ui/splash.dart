@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-import 'package:vdsinamonitor/bl/initialization.dart';
 import 'package:vdsinamonitor/ui/accounts/list.dart';
 import 'package:vdsinamonitor/globals/typedefs.dart';
 
 bool firstRun = true;
 
 class SplashWindow extends StatelessWidget {
-  final Completer<ResultEx> _completer;
-  const SplashWindow(Completer<ResultEx> completer, {super.key}):
+  final Completer<TResultEx> _completer;
+  const SplashWindow(Completer<TResultEx> completer, {super.key}):
     _completer=completer;
 
   @override

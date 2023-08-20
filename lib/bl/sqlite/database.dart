@@ -7,6 +7,7 @@ import 'package:sqlite3/open.dart' as sqlite_open;
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/bl/sqlite/converter.dart';
+import 'package:vdsinamonitor/globals/utils.dart';
 
 typedef OSOverride = ({
   sqlite_open.OperatingSystem os,
@@ -20,6 +21,9 @@ class SQLiteDatabase {
   final bool _convert;
   final bool _reset;
   final List<OSOverride>? _overrides;
+  bool _isUnderTransaction = false;
+
+  bool get isUnderTransaction => _isUnderTransaction;
 
   SQLiteDatabase({
     String? path = '',
@@ -33,16 +37,14 @@ class SQLiteDatabase {
         _reset = reset,
         _overrides = overrides;
 
-  Future<ResultEx> openEx() async {
-    return await Future<ResultEx>(() async {
+  Future<TResultEx> openEx() async {
+    return await Future<TResultEx>(() async {
       try {
         if (_name.isEmpty) {
-          return (
-            result: false,
-            details: (
-              code: ResultCode.rcError,
-              message: 'DB name is not specified'
-            )
+          return resultEx(
+            false,
+            code: ResultCode.rcError,
+            message: 'DB name is not specified'
           );
         }
 
@@ -52,12 +54,10 @@ class SQLiteDatabase {
           }
           bool exists = await Directory(_path!).exists();
           if (!exists) {
-            return (
-              result: false,
-              details: (
-                code: ResultCode.rcError,
-                message: 'DB folder doesn' 't exist'
-              )
+            return resultEx(
+              false,
+              code: ResultCode.rcError,
+              message: 'DB folder doesn''t exist'
             );
           }
         }
@@ -89,32 +89,31 @@ class SQLiteDatabase {
 
         _db?.execute('PRAGMA foreign_keys = ON;');
 
-        return (result: true, details: null);
+        return resultEx(true);
       } catch (e) {
-        return (
-          result: false,
-          details: (code: ResultCode.rcError, message: e.toString())
+        return resultEx(
+          false,
+          code: ResultCode.rcError,
+          message: e.toString()
         );
       }
     });
   }
 
-  ResultEx _attachDB() {
+  TResultEx _attachDB() {
     if (_path == null) {
       _db = sqlite3.sqlite3.openInMemory();
     } else {
       if (_name.isEmpty) {
-        return (
-          result: false,
-          details: (
-            code: ResultCode.rcError,
-            message: 'DB path is set but DB name is not specified'
-          )
+        return resultEx(
+          false,
+          code: ResultCode.rcError,
+          message: 'DB path is set but DB name is not specified'
         );
       }
       _db = sqlite3.sqlite3.open(path.join(_path!, _name));
     }
-    return (result: true, details: null);
+    return resultEx(true);
   }
 
   Future<bool> open() async {
@@ -127,8 +126,8 @@ class SQLiteDatabase {
     _db = null;
   }
 
-  Future<ResultEx> resetEx({bool convert = true}) async {
-    return await Future<ResultEx>(() async {
+  Future<TResultEx> resetEx({bool convert = true}) async {
+    return await Future<TResultEx>(() async {
       if (_db != null) {
         close();
       }
@@ -136,9 +135,10 @@ class SQLiteDatabase {
         try {
           File(path.join(_path!, _name)).deleteSync();
         } catch (e) {
-          return (
-            result: false,
-            details: (code: ResultCode.rcError, message: e.toString())
+          return resultEx(
+            false,
+            code: ResultCode.rcError,
+            message: e.toString()
           );
         }
       }
@@ -149,7 +149,7 @@ class SQLiteDatabase {
           return cnvRes;
         }
       }
-      return (result: true, details: null);
+      return resultEx(true);
     });
   }
 
@@ -160,12 +160,12 @@ class SQLiteDatabase {
     });
   }
 
-  Future<ResultEx> convertEx() async {
+  Future<TResultEx> convertEx() async {
     try {
       final cnvResult = await SQLiteDatabaseConverter(_db!, _name).execute();
-      return (result: (cnvResult.version ?? 0) > 0, details: null);
+      return resultEx((cnvResult.version ?? 0) > 0);
     } catch (e) {
-      return (result: false, details: null);
+      return resultEx(false);
     }
   }
 
@@ -174,5 +174,59 @@ class SQLiteDatabase {
       var result = await convertEx();
       return result.result;
     });
+  }
+
+  void execute(String query, [List<Object?> params = const []]) {
+    _db?.execute(query, params);
+  }
+
+  sqlite3.ResultSet? select(String query, [List<Object?> params = const []]) {
+    return _db?.select(query, params);
+  }
+
+  sqlite3.Row? selectRow(String query, [List<Object?> params = const []]) {
+    final rs = select(query, params);
+    if(rs != null && rs.isNotEmpty) {
+      return rs[0];
+    }
+    return null;
+  }
+
+  T? selectScalar<T>(String query, [List<Object?> params = const []]) {
+    final row = selectRow(query, params);
+    if(row != null && row.isNotEmpty) {
+      return row[0] as T;
+    }
+    return null;
+  }
+
+  bool beginTransaction({String transactionType = 'deferred'}) {
+    try {
+      execute('begin $transactionType transaction');
+      _isUnderTransaction = true;
+    } catch (_) {
+      _isUnderTransaction = false;
+    }
+    return isUnderTransaction;
+  }
+
+  bool commit() {
+    try {
+      execute('commit transaction');
+      _isUnderTransaction = false;
+    } catch (_) {
+      _isUnderTransaction = false;
+    }
+    return isUnderTransaction;
+  }
+
+  bool rollback() {
+    try {
+      execute('rollback transaction');
+      _isUnderTransaction = false;
+    } catch (_) {
+      _isUnderTransaction = false;
+    }
+    return isUnderTransaction;
   }
 }

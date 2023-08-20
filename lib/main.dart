@@ -8,14 +8,14 @@ import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/bl/initialization.dart';
 
 void main() {
-  Completer<ResultEx> completer = Completer();
+  Completer<TResultEx> completer = Completer();
   runApp(VDSinaApplication(completer));
   initialize(completer);
 }
 
 class VDSinaApplication extends StatelessWidget {
-  final Completer<ResultEx> _completer;
-  const VDSinaApplication(Completer<ResultEx> completer, {super.key}):
+  final Completer<TResultEx> _completer;
+  const VDSinaApplication(Completer<TResultEx> completer, {super.key}):
     _completer=completer;
 
   @override

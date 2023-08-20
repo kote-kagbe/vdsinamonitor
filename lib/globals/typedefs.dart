@@ -1,7 +1,10 @@
+import 'dart:core';
+
 enum ResultCode {
   rcInfo,
   rcWarning,
   rcError,
+  rcFatal,
 }
-typedef ResultDetails = ({ResultCode? code, String? message});
-typedef ResultEx = ({bool result, ResultDetails? details});
+typedef TResultDetails = ({ResultCode? code, String? message, String? userMessage});
+typedef TResultEx = ({bool result, TResultDetails? details});

@@ -91,8 +91,8 @@ class SQLiteDatabaseConverter {
     return (version: _version, subversion: _subVersion);
   }
 
-  Future<ResultEx> _applyConverter(ByteData code) {
-    final Completer<ResultEx> completer = Completer();
+  Future<TResultEx> _applyConverter(ByteData code) {
+    final Completer<TResultEx> completer = Completer();
 
     int counter = 1;
     final List<String> request = [];
@@ -105,17 +105,20 @@ class SQLiteDatabaseConverter {
     .transform(utf8.decoder)
     .transform(const LineSplitter())
     .listen(null, cancelOnError: true);
+
     subscription.onError((e) {
       _db.execute('rollback transaction');
-      completer.completeError((result: false, details: (code: null, message: 'Ошибка чтения конвертера: $e')));
+      completer.completeError(resultEx(false, message: 'Ошибка чтения конвертера: $e'));
     });
+
     subscription.onDone(() {
       if(request.isNotEmpty) {
         _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
       }
       _db.execute('commit transaction');
-      completer.complete((result: true, details: null));
+      completer.complete(resultEx(true));
     });
+
     subscription.onData((String line) {
       try {
         if(line.startsWith('@') && request.isEmpty) {
@@ -151,7 +154,7 @@ class SQLiteDatabaseConverter {
       } catch (e) {
         _db.execute('rollback transaction');
         subscription.cancel();
-        completer.completeError((result: false, details: (code: null, message: 'Ошибка применения конвертера: $e')));
+        completer.completeError(resultEx(false, message: 'Ошибка применения конвертера: $e'));
       }
     });
 
