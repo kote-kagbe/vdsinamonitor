@@ -216,11 +216,17 @@ class SQLiteDatabase {
     return completer.future;
   }
 
-  void _processTransactionQueue<T>() async {
+  void _processTransactionQueue<T>() {
     if(_transactionQueue.isNotEmpty) {
       final item = _transactionQueue.first;
       if(_db != null) {
-        _db?.execute('begin ${item.transactionType} transaction');
+        try {
+          _db?.execute('begin ${item.transactionType} transaction');
+        } catch (e) {
+          item.completer.completeError('Не удалось создать транзакцию: $e');
+          _transactionQueue.removeFirst();
+          _processTransactionQueue();
+        }
         item.method()
           .then((methodResult) {
             _db?.execute('commit transaction');
