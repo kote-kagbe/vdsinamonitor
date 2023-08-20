@@ -220,26 +220,27 @@ class SQLiteDatabase {
     if(_transactionQueue.isNotEmpty) {
       final item = _transactionQueue.first;
       if(_db != null) {
-        try {
+        Future<void>(() {
           _db?.execute('begin ${item.transactionType} transaction');
-        } catch (e) {
+        }).then((_) {
+          item.method()
+            .then((methodResult) {
+              _db?.execute('commit transaction');
+              item.completer.complete(methodResult);
+              _transactionQueue.removeFirst();
+              _processTransactionQueue();
+            })
+            .catchError((methodError) {
+              _db?.execute('rollback transaction');
+              item.completer.completeError(methodError);
+              _transactionQueue.removeFirst();
+              _processTransactionQueue();
+            });
+        }).catchError((e) {
           item.completer.completeError('Не удалось создать транзакцию: $e');
           _transactionQueue.removeFirst();
           _processTransactionQueue();
-        }
-        item.method()
-          .then((methodResult) {
-            _db?.execute('commit transaction');
-            item.completer.complete(methodResult);
-            _transactionQueue.removeFirst();
-            _processTransactionQueue();
-          })
-          .catchError((methodError) {
-            _db?.execute('rollback transaction');
-            item.completer.completeError(methodError);
-            _transactionQueue.removeFirst();
-            _processTransactionQueue();
-          });
+        });
       } else {
         item.completer.completeError('База данных не подключена');
         _transactionQueue.removeFirst();
