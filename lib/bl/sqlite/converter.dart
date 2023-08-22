@@ -7,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
+import 'package:vdsinamonitor/globals/intercom.dart';
 
 typedef DBVersion = ({int? version, int? subversion});
 typedef QueryParams = ({Map<String, String>? extract, List<String>? apply});
@@ -62,6 +63,7 @@ class SQLiteDatabaseConverter {
   }
 
   Future<DBVersion> execute() async {
+    logger.info('запущена конвертация БД $_dbName');
     _prepare();
 
     ByteData? code;
@@ -88,6 +90,7 @@ class SQLiteDatabaseConverter {
       }
     } while (code != null);
 
+    logger.info('завершена конвертация БД $_dbName');
     return (version: _version, subversion: _subVersion);
   }
 
@@ -102,18 +105,23 @@ class SQLiteDatabaseConverter {
     _db.execute('begin exclusive transaction');
 
     final subscription = _parseCode(code.buffer.asUint8List())
-    .transform(utf8.decoder)
-    .transform(const LineSplitter())
-    .listen(null, cancelOnError: true);
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(null, cancelOnError: true);
 
     subscription.onError((e) {
       _db.execute('rollback transaction');
-      completer.completeError(resultEx(false, message: 'Ошибка чтения конвертера: $e'));
+      completer.completeError(
+          resultEx(false, message: 'Ошибка чтения конвертера: $e'));
     });
 
     subscription.onDone(() {
-      if(request.isNotEmpty) {
-        _db.execute(request.join('\n'), [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)]);
+      if (request.isNotEmpty) {
+        _db.execute(request.join('\n'), [
+          ...(paramList.entries
+                  .where((el) => (params?.apply ?? []).contains(el.key)))
+              .map((el) => el.value)
+        ]);
       }
       _db.execute('commit transaction');
       completer.complete(resultEx(true));
@@ -121,23 +129,29 @@ class SQLiteDatabaseConverter {
 
     subscription.onData((String line) {
       try {
-        if(line.startsWith('@') && request.isEmpty) {
+        if (line.startsWith('@') && request.isEmpty) {
           _processMacros(line.substring(1), counter);
           counter += 1;
-        } else if(line.startsWith(r'$') && request.isEmpty) {
-          params = _processParams(paramList, line.substring(1), counter, params);
+        } else if (line.startsWith(r'$') && request.isEmpty) {
+          params =
+              _processParams(paramList, line.substring(1), counter, params);
           counter += 1;
-        } else if(line.isEmpty && request.isNotEmpty) {
+        } else if (line.isEmpty && request.isNotEmpty) {
           String query = request.join('\n');
-          if(params == null) {
+          if (params == null) {
             _db.execute(query);
           } else {
-            List<dynamic> args = [...(paramList.entries.where((el) => (params?.apply ?? []).contains(el.key))).map((el) => el.value)];
+            List<dynamic> args = [
+              ...(paramList.entries
+                      .where((el) => (params?.apply ?? []).contains(el.key)))
+                  .map((el) => el.value)
+            ];
             Map<String, String>? param = params?.extract;
-            if(param != null) {
+            if (param != null) {
               final result = _db.select(query, args);
-              for(final pair in param.entries) {
-                paramList[pair.key] = result.isNotEmpty ? result[0][pair.value] : null;
+              for (final pair in param.entries) {
+                paramList[pair.key] =
+                    result.isNotEmpty ? result[0][pair.value] : null;
               }
             } else {
               _db.execute(query, args);
@@ -147,66 +161,79 @@ class SQLiteDatabaseConverter {
           params = null;
           counter += 1;
         } else {
-          if(line.trim().isNotEmpty) {
+          if (line.trim().isNotEmpty) {
             request.add(line);
           }
         }
       } catch (e) {
         _db.execute('rollback transaction');
         subscription.cancel();
-        completer.completeError(resultEx(false, message: 'Ошибка применения конвертера: $e'));
+        completer.completeError(
+            resultEx(false, message: 'Ошибка применения конвертера: $e'));
       }
     });
 
     return completer.future;
   }
 
-  QueryParams _processParams(Map<String, dynamic> paramList, String macros, int counter, QueryParams? update) {
+  QueryParams _processParams(Map<String, dynamic> paramList, String macros,
+      int counter, QueryParams? update) {
     List<String> parts = macros.split(' ');
-    if(parts.length < 2) {
+    if (parts.length < 2) {
       throw Exception('Неверный синтаксис макроса $macros #$counter');
     }
     switch (parts[0]) {
-      case '<': {
-        final Map<String, String> extract = {};
-        for(final param in parts.sublist(1)) {
-          final List<String> data = param.split(':');
-          extract[data[0]] = data.length > 1 ? data[1] : data[0];
-        }
-        return (extract: extract, apply: update?.apply);
-      }
-      case '>': {
-        parts.sublist(1).forEach((el) {
-          if(!paramList.containsKey(el)) {
-            throw Exception('Не найден параметр $el макроса $macros #$counter');
+      case '<':
+        {
+          final Map<String, String> extract = {};
+          for (final param in parts.sublist(1)) {
+            final List<String> data = param.split(':');
+            extract[data[0]] = data.length > 1 ? data[1] : data[0];
           }
-        });
-        return (apply: parts.sublist(1), extract: update?.extract);
-      }
-      default: throw Exception('Неизвестный макрос $macros #$counter');
+          return (extract: extract, apply: update?.apply);
+        }
+      case '>':
+        {
+          parts.sublist(1).forEach((el) {
+            if (!paramList.containsKey(el)) {
+              throw Exception(
+                  'Не найден параметр $el макроса $macros #$counter');
+            }
+          });
+          return (apply: parts.sublist(1), extract: update?.extract);
+        }
+      default:
+        throw Exception('Неизвестный макрос $macros #$counter');
     }
   }
 
   void _processMacros(String macros, int counter) {
     final List<String> parts = macros.split(' ');
-    if(parts.isEmpty) {
+    if (parts.isEmpty) {
       throw Exception('Пустое тело макроса $macros');
     }
     switch (parts[0]) {
-      case 'set': {
-        if(parts.length != 3) {
-          throw Exception('Неверное количество аргументов для макроса $macros #$counter');
+      case 'set':
+        {
+          if (parts.length != 3) {
+            throw Exception(
+                'Неверное количество аргументов для макроса $macros #$counter');
+          }
+          int? value = int.tryParse(parts[2]);
+          if (value == null) {
+            throw Exception(
+                'Неверное значение аргумента ${parts[2]} макроса $macros #$counter');
+          }
+          switch (parts[1]) {
+            case 'version':
+              _setVersion(version: value);
+            case 'subversion':
+              _setVersion(subVersion: value);
+            default:
+              throw Exception(
+                  'Неверное значение аргумента ${parts[1]} макроса $macros #$counter');
+          }
         }
-        int? value = int.tryParse(parts[2]);
-        if(value == null) {
-          throw Exception('Неверное значение аргумента ${parts[2]} макроса $macros #$counter');
-        }
-        switch (parts[1]) {
-          case 'version': _setVersion(version: value);
-          case 'subversion': _setVersion(subVersion: value);
-          default: throw Exception('Неверное значение аргумента ${parts[1]} макроса $macros #$counter');
-        }
-      }
       default:
         throw Exception('Неизвестный макрос $macros #$counter');
     }

@@ -17,7 +17,11 @@ typedef OSOverride = ({
 });
 
 typedef TransactionMethod<T> = T Function();
-typedef TransactionBlock<T> = ({Completer<T> completer, TransactionMethod<T> method, String transactionType});
+typedef TransactionBlock<T> = ({
+  Completer<T> completer,
+  TransactionMethod<T> method,
+  String transactionType
+});
 
 class SQLiteDatabase {
   sqlite3.Database? _db;
@@ -44,11 +48,8 @@ class SQLiteDatabase {
     return await Future<TResultEx>(() async {
       try {
         if (_name.isEmpty) {
-          return resultEx(
-            false,
-            code: ResultCode.rcError,
-            message: 'DB name is not specified'
-          );
+          return resultEx(false,
+              code: ResultCode.rcError, message: 'Не указано имя БД');
         }
 
         if (_path != null) {
@@ -57,11 +58,8 @@ class SQLiteDatabase {
           }
           bool exists = await Directory(_path!).exists();
           if (!exists) {
-            return resultEx(
-              false,
-              code: ResultCode.rcError,
-              message: 'DB folder doesn''t exist'
-            );
+            return resultEx(false,
+                code: ResultCode.rcError, message: 'Папка БД не существует');
           }
         }
 
@@ -94,11 +92,7 @@ class SQLiteDatabase {
 
         return resultEx(true);
       } catch (e) {
-        return resultEx(
-          false,
-          code: ResultCode.rcError,
-          message: e.toString()
-        );
+        return resultEx(false, code: ResultCode.rcError, message: e.toString());
       }
     });
   }
@@ -108,11 +102,9 @@ class SQLiteDatabase {
       _db = sqlite3.sqlite3.openInMemory();
     } else {
       if (_name.isEmpty) {
-        return resultEx(
-          false,
-          code: ResultCode.rcError,
-          message: 'DB path is set but DB name is not specified'
-        );
+        return resultEx(false,
+            code: ResultCode.rcError,
+            message: 'Папка БД указана, но не указано название БД');
       }
       _db = sqlite3.sqlite3.open(path.join(_path!, _name));
     }
@@ -138,11 +130,8 @@ class SQLiteDatabase {
         try {
           File(path.join(_path!, _name)).deleteSync();
         } catch (e) {
-          return resultEx(
-            false,
-            code: ResultCode.rcError,
-            message: e.toString()
-          );
+          return resultEx(false,
+              code: ResultCode.rcError, message: e.toString());
         }
       }
       _attachDB();
@@ -189,7 +178,7 @@ class SQLiteDatabase {
 
   sqlite3.Row? selectRow(String query, [List<Object?> params = const []]) {
     final rs = select(query, params);
-    if(rs != null && rs.isNotEmpty) {
+    if (rs != null && rs.isNotEmpty) {
       return rs[0];
     }
     return null;
@@ -197,29 +186,37 @@ class SQLiteDatabase {
 
   T? selectScalar<T>(String query, [List<Object?> params = const []]) {
     final row = selectRow(query, params);
-    if(row != null && row.isNotEmpty) {
+    if (row != null && row.isNotEmpty) {
       return row[0] as T;
     }
     return null;
   }
 
-  Future<T> withTransaction<T>({required TransactionMethod<T> method, String transactionType = 'DEFERRED'}) {
+  Future<T> withTransaction<T>(
+      {required TransactionMethod<T> method,
+      String transactionType = 'DEFERRED'}) {
     const transactionTypes = <String>['DEFERRED', 'IMMEDIATE', 'EXCLUSIVE '];
-    if(!transactionTypes.any((element) => element == transactionType.toUpperCase())) {
-      throw Exception('Транзакция должна иметь один из этих типов: ${transactionTypes.join(', ')}');
+    if (!transactionTypes
+        .any((element) => element == transactionType.toUpperCase())) {
+      throw Exception(
+          'Транзакция должна иметь один из этих типов: ${transactionTypes.join(', ')}');
     }
     final Completer<T> completer = Completer<T>();
-    _transactionQueue.addLast((completer: completer, method: method, transactionType: transactionType));
-    if(_transactionQueue.length == 1) {
+    _transactionQueue.addLast((
+      completer: completer,
+      method: method,
+      transactionType: transactionType
+    ));
+    if (_transactionQueue.length == 1) {
       _processTransactionQueue<T>();
     }
     return completer.future;
   }
 
   void _processTransactionQueue<T>() {
-    if(_transactionQueue.isNotEmpty) {
+    if (_transactionQueue.isNotEmpty) {
       final item = _transactionQueue.first;
-      if(_db != null) {
+      if (_db != null) {
         Future<void>(() {
           _db?.execute('begin ${item.transactionType} transaction');
           try {
