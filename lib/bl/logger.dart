@@ -56,10 +56,10 @@ class Logger {
   }
 
   void dispose() {
+    _initialized = null;
     _logSubscription.cancel();
     _logSink?.close();
     _logChannel.close();
-    _initialized = null;
   }
 
   void _write(LogInfo info) {
