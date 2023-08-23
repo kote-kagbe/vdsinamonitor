@@ -141,7 +141,9 @@ class Logger implements AbstractLogger {
   }
 
   CustomLogger custom(String prefix) {
-    _customInstances[prefix] ??= WeakReference(CustomLogger(prefix, this));
+    if (_customInstances[prefix]?.target == null) {
+      _customInstances[prefix] = WeakReference(CustomLogger(prefix, this));
+    }
     return _customInstances[prefix]!.target!;
   }
 }
