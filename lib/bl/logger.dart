@@ -32,10 +32,8 @@ class Logger {
   IOSink? _logSink;
 
   factory Logger(String name) {
-    return _instances.putIfAbsent(name, () {
-      _instances[name] ??= Logger._spawn(name);
-      return _instances[name];
-    })!;
+    _instances[name] ??= Logger._spawn(name);
+    return _instances[name]!;
   }
 
   Logger._spawn(this._name) {
