@@ -21,7 +21,41 @@ typedef LogInfo = ({
   Completer? completer
 });
 
-class Logger {
+abstract class LoggerCore {
+  void info(String message);
+  void warning(String message);
+  void error(String message);
+  Future<void> fatal(String message);
+}
+
+class CustomLogger implements LoggerCore {
+  final String _prefix;
+  final LoggerCore _parent;
+
+  CustomLogger(this._prefix, this._parent);
+
+  @override
+  void info(String message) {
+    _parent.info('[$_prefix] $message');
+  }
+
+  @override
+  void warning(String message) {
+    _parent.warning('[$_prefix] $message');
+  }
+
+  @override
+  void error(String message) {
+    _parent.error('[$_prefix] $message');
+  }
+
+  @override
+  Future<void> fatal(String message) {
+    return _parent.fatal('[$_prefix] $message');
+  }
+}
+
+class Logger implements LoggerCore {
   static final Map<String, Logger?> _instances = {};
 
   String? _tmpPath;
@@ -30,6 +64,7 @@ class Logger {
   late final StreamController<LogInfo> _logChannel;
   late final StreamSubscription<LogInfo> _logSubscription;
   IOSink? _logSink;
+  final Map<String, CustomLogger> _customInstances = {};
 
   factory Logger(String name) {
     _instances[name] ??= Logger._spawn(name);
@@ -83,21 +118,30 @@ class Logger {
     }
   }
 
+  @override
   void info(String message) {
     _log(message, LogType.ltINFO);
   }
 
+  @override
   void warning(String message) {
     _log(message, LogType.ltWARNING);
   }
 
+  @override
   void error(String message) {
     _log(message, LogType.ltERROR);
   }
 
+  @override
   Future<void> fatal(String message) {
     Completer completer = Completer();
     _log(message, LogType.ltFATAL, completer: completer);
     return completer.future;
+  }
+
+  CustomLogger custom(String prefix) {
+    _customInstances[prefix] ??= CustomLogger(prefix, this);
+    return _customInstances[prefix]!;
   }
 }
