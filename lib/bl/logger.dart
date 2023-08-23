@@ -21,16 +21,16 @@ typedef LogInfo = ({
   Completer? completer
 });
 
-abstract class LoggerCore {
+abstract class AbstractLogger {
   void info(String message);
   void warning(String message);
   void error(String message);
   Future<void> fatal(String message);
 }
 
-class CustomLogger implements LoggerCore {
+class CustomLogger implements AbstractLogger {
   final String _prefix;
-  final LoggerCore _parent;
+  final AbstractLogger _parent;
 
   CustomLogger(this._prefix, this._parent);
 
@@ -55,7 +55,7 @@ class CustomLogger implements LoggerCore {
   }
 }
 
-class Logger implements LoggerCore {
+class Logger implements AbstractLogger {
   static final Map<String, Logger?> _instances = {};
 
   String? _tmpPath;
@@ -64,7 +64,7 @@ class Logger implements LoggerCore {
   late final StreamController<LogInfo> _logChannel;
   late final StreamSubscription<LogInfo> _logSubscription;
   IOSink? _logSink;
-  final Map<String, CustomLogger> _customInstances = {};
+  final Map<String, WeakReference<CustomLogger>> _customInstances = {};
 
   factory Logger(String name) {
     _instances[name] ??= Logger._spawn(name);
@@ -141,7 +141,7 @@ class Logger implements LoggerCore {
   }
 
   CustomLogger custom(String prefix) {
-    _customInstances[prefix] ??= CustomLogger(prefix, this);
-    return _customInstances[prefix]!;
+    _customInstances[prefix] ??= WeakReference(CustomLogger(prefix, this));
+    return _customInstances[prefix]!.target!;
   }
 }
