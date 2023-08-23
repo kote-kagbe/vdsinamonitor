@@ -21,42 +21,69 @@ typedef LogInfo = ({
   Completer? completer
 });
 
-class Logger {
-  static final Logger _logger = Logger._spawn(StreamController<LogInfo>());
+abstract class AbstractLogger {
+  void info(String message);
+  void warning(String message);
+  void error(String message);
+  Future<void> fatal(String message);
+}
+
+class CustomLogger implements AbstractLogger {
+  final String _prefix;
+  final AbstractLogger _parent;
+
+  CustomLogger(this._prefix, this._parent);
+
+  @override
+  void info(String message) {
+    _parent.info('[$_prefix] $message');
+  }
+
+  @override
+  void warning(String message) {
+    _parent.warning('[$_prefix] $message');
+  }
+
+  @override
+  void error(String message) {
+    _parent.error('[$_prefix] $message');
+  }
+
+  @override
+  Future<void> fatal(String message) {
+    return _parent.fatal('[$_prefix] $message');
+  }
+}
+
+class Logger implements AbstractLogger {
+  static final Map<String, Logger?> _instances = {};
 
   String? _tmpPath;
   String? _docsPath;
-  late final String _name;
-  final StreamController<LogInfo> _logChannel;
+  final String _name;
+  late final StreamController<LogInfo> _logChannel;
   late final StreamSubscription<LogInfo> _logSubscription;
   IOSink? _logSink;
-  static bool? _initialized = false;
+  final Map<String, WeakReference<CustomLogger>> _customInstances = {};
 
   factory Logger(String name) {
-    if (_initialized != null) {
-      if (!_initialized!) {
-        _initialized = true;
-        _logger._name = name;
-        getTemporaryDirectory().then((directory) {
-          _logger
-            .._tmpPath = path.join(directory.path, '${_logger._name}.log')
-            .._logSink = File(_logger._tmpPath!).openWrite()
-            .._logSubscription.resume();
-        });
-      }
-      return Logger._logger;
-    } else {
-      throw Exception('Логгер был остановлен');
-    }
+    _instances[name] ??= Logger._spawn(name);
+    return _instances[name]!;
   }
 
-  Logger._spawn(this._logChannel) {
+  Logger._spawn(this._name) {
+    _logChannel = StreamController<LogInfo>();
     _logSubscription = _logChannel.stream.listen(_write);
     _logSubscription.pause();
+    getTemporaryDirectory().then((directory) {
+      _tmpPath = path.join(directory.path, '$_name.log');
+      _logSink = File(_tmpPath!).openWrite();
+      _logSubscription.resume();
+    });
   }
 
   void dispose() {
-    _initialized = null;
+    _instances[_name] = null;
     _logSubscription.cancel();
     _logSink?.close();
     _logChannel.close();
@@ -91,21 +118,30 @@ class Logger {
     }
   }
 
+  @override
   void info(String message) {
     _log(message, LogType.ltINFO);
   }
 
+  @override
   void warning(String message) {
     _log(message, LogType.ltWARNING);
   }
 
+  @override
   void error(String message) {
     _log(message, LogType.ltERROR);
   }
 
+  @override
   Future<void> fatal(String message) {
     Completer completer = Completer();
     _log(message, LogType.ltFATAL, completer: completer);
     return completer.future;
+  }
+
+  CustomLogger custom(String prefix) {
+    _customInstances[prefix] ??= WeakReference(CustomLogger(prefix, this));
+    return _customInstances[prefix]!.target!;
   }
 }
