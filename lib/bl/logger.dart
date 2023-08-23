@@ -22,41 +22,35 @@ typedef LogInfo = ({
 });
 
 class Logger {
-  static final Logger _logger = Logger._spawn(StreamController<LogInfo>());
+  static final Map<String, Logger?> _instances = {};
 
   String? _tmpPath;
   String? _docsPath;
-  late final String _name;
-  final StreamController<LogInfo> _logChannel;
+  final String _name;
+  late final StreamController<LogInfo> _logChannel;
   late final StreamSubscription<LogInfo> _logSubscription;
   IOSink? _logSink;
-  static bool? _initialized = false;
 
   factory Logger(String name) {
-    if (_initialized != null) {
-      if (!_initialized!) {
-        _initialized = true;
-        _logger._name = name;
-        getTemporaryDirectory().then((directory) {
-          _logger
-            .._tmpPath = path.join(directory.path, '${_logger._name}.log')
-            .._logSink = File(_logger._tmpPath!).openWrite()
-            .._logSubscription.resume();
-        });
-      }
-      return Logger._logger;
-    } else {
-      throw Exception('Логгер был остановлен');
-    }
+    return _instances.putIfAbsent(name, () {
+      _instances[name] ??= Logger._spawn(name);
+      return _instances[name];
+    })!;
   }
 
-  Logger._spawn(this._logChannel) {
+  Logger._spawn(this._name) {
+    _logChannel = StreamController<LogInfo>();
     _logSubscription = _logChannel.stream.listen(_write);
     _logSubscription.pause();
+    getTemporaryDirectory().then((directory) {
+      _tmpPath = path.join(directory.path, '$_name.log');
+      _logSink = File(_tmpPath!).openWrite();
+      _logSubscription.resume();
+    });
   }
 
   void dispose() {
-    _initialized = null;
+    _instances[_name] = null;
     _logSubscription.cancel();
     _logSink?.close();
     _logChannel.close();
