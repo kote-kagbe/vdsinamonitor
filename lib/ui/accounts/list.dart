@@ -12,7 +12,6 @@ class AccountListWindow extends StatefulWidget {
 }
 
 class _AccountListWindowState extends AppAuthState<AccountListWindow> {
-
   @override
   Widget buildOwn(BuildContext context) {
     return Scaffold(
@@ -28,14 +27,18 @@ class _AccountListWindowState extends AppAuthState<AccountListWindow> {
               'account list',
             ),
             IconButton(
-              onPressed: (){Navigator.push(context, MaterialPageRoute(builder: (_){return const ServerListWindow();}));},
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) {
+                  return const ServerListWindow();
+                }));
+              },
               icon: const Icon(Icons.lock_rounded),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: (){},
+        onPressed: () {},
         child: const Icon(Icons.add_rounded),
       ),
     );

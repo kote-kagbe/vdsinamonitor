@@ -11,6 +11,7 @@ enum LogType {
   ltFATAL('FATAL');
 
   const LogType(this.text);
+
   final String text;
 }
 
@@ -23,8 +24,11 @@ typedef LogInfo = ({
 
 abstract class AbstractLogger {
   void info(String message);
+
   void warning(String message);
+
   void error(String message);
+
   Future<void> fatal(String message);
 }
 

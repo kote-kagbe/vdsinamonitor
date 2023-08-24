@@ -15,8 +15,9 @@ void main() {
 
 class VDSinaApplication extends StatelessWidget {
   final Completer<TResultEx> _completer;
-  const VDSinaApplication(Completer<TResultEx> completer, {super.key}):
-    _completer=completer;
+
+  const VDSinaApplication(Completer<TResultEx> completer, {super.key})
+      : _completer = completer;
 
   @override
   Widget build(BuildContext context) {

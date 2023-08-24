@@ -11,7 +11,6 @@ class ServerListWindow extends StatefulWidget {
 }
 
 class _ServerListWindowState extends AppAuthState<ServerListWindow> {
-
   @override
   Widget buildOwn(BuildContext context) {
     return Scaffold(
@@ -27,7 +26,7 @@ class _ServerListWindowState extends AppAuthState<ServerListWindow> {
               'server list',
             ),
             IconButton(
-              onPressed: (){},
+              onPressed: () {},
               icon: const Icon(Icons.lock_rounded),
             ),
           ],

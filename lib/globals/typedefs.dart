@@ -6,5 +6,10 @@ enum ResultCode {
   rcError,
   rcFatal,
 }
-typedef TResultDetails = ({ResultCode? code, String? message, String? userMessage});
+
+typedef TResultDetails = ({
+  ResultCode? code,
+  String? message,
+  String? userMessage
+});
 typedef TResultEx = ({bool result, TResultDetails? details});
