@@ -7,10 +7,9 @@ import 'package:vdsinamonitor/globals/typedefs.dart';
 bool firstRun = true;
 
 class SplashWindow extends StatelessWidget {
-  final Completer<TResultEx> _completer;
+  final Completer<ResultEx> _completer;
 
-  const SplashWindow(Completer<TResultEx> completer, {super.key})
-      : _completer = completer;
+  const SplashWindow(this._completer, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +19,8 @@ class SplashWindow extends StatelessWidget {
             MaterialPageRoute(builder: (_) {
           return const AccountListWindow();
         }));
+      }).catchError((err) {
+        //
       });
       firstRun = false;
     }

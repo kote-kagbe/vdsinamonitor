@@ -60,10 +60,12 @@ class CustomLogger implements AbstractLogger {
 }
 
 class Logger implements AbstractLogger {
+  static final Finalizer<Logger> _finalizer =
+      Finalizer((logger) => logger.dispose());
   static final Map<String, Logger?> _instances = {};
+  static LogType logLevel = LogType.ltWARNING;
 
   String? _tmpPath;
-  String? _docsPath;
   final String _name;
   late final StreamController<LogInfo> _logChannel;
   late final StreamSubscription<LogInfo> _logSubscription;
@@ -72,6 +74,8 @@ class Logger implements AbstractLogger {
 
   factory Logger(String name) {
     _instances[name] ??= Logger._spawn(name);
+    _finalizer.attach(_instances[name]!, _instances[name]!,
+        detach: _instances[name]!);
     return _instances[name]!;
   }
 
@@ -86,11 +90,19 @@ class Logger implements AbstractLogger {
     });
   }
 
+  CustomLogger custom(String prefix) {
+    if (_customInstances[prefix]?.target == null) {
+      _customInstances[prefix] = WeakReference(CustomLogger(prefix, this));
+    }
+    return _customInstances[prefix]!.target!;
+  }
+
   void dispose() {
     _instances[_name] = null;
     _logSubscription.cancel();
     _logSink?.close();
     _logChannel.close();
+    _finalizer.detach(this);
   }
 
   void _write(LogInfo info) {
@@ -99,26 +111,27 @@ class Logger implements AbstractLogger {
   }
 
   void _log(String message, LogType type, {Completer? completer}) async {
-    _logChannel.add((
-      message: message,
-      type: type,
-      dt: DateTime.now(),
-      completer: completer
-    ));
+    if (type.index >= logLevel.index) {
+      _logChannel.add((
+        message: message,
+        type: type,
+        dt: DateTime.now(),
+        completer: completer
+      ));
+    }
   }
 
-  Future<void> export() async {
-    if (_tmpPath != null) {
-      _docsPath ??= path.join(
-          (await getApplicationDocumentsDirectory()).path, '$_name.log');
-      if (_docsPath != null && _docsPath!.isNotEmpty) {
-        _logSubscription.pause();
-        _logSink?.close();
-        _logSink = null;
-        await File(_tmpPath!).copy(_docsPath!);
-        _logSink = File(path.join(_tmpPath!)).openWrite(mode: FileMode.append);
-        _logSubscription.resume();
-      }
+  Future<void> export(String exportPath) async {
+    if (_tmpPath != null &&
+        exportPath.isNotEmpty &&
+        await Directory(exportPath).exists()) {
+      final exportFile = path.join(exportPath, '$_name.log');
+      _logSubscription.pause();
+      _logSink?.close();
+      _logSink = null;
+      await File(_tmpPath!).copy(exportFile);
+      _logSink = File(path.join(_tmpPath!)).openWrite(mode: FileMode.append);
+      _logSubscription.resume();
     }
   }
 
@@ -142,12 +155,5 @@ class Logger implements AbstractLogger {
     Completer completer = Completer();
     _log(message, LogType.ltFATAL, completer: completer);
     return completer.future;
-  }
-
-  CustomLogger custom(String prefix) {
-    if (_customInstances[prefix]?.target == null) {
-      _customInstances[prefix] = WeakReference(CustomLogger(prefix, this));
-    }
-    return _customInstances[prefix]!.target!;
   }
 }

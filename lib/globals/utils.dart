@@ -11,7 +11,7 @@ Future<ByteData?> tryExtractAsset(final String assetPath) async {
       .send('flutter/assets', encoded.buffer.asByteData());
 }
 
-TResultEx resultEx(bool result,
+ResultEx resultEx(bool result,
     {ResultCode? code, String? message, String? userMessage}) {
   return (
     result: result,

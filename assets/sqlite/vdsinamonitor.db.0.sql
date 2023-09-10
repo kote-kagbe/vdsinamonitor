@@ -8,8 +8,8 @@
 create table [options] ( -- кастомные опции с уникальными именами
     [id] integer not null primary key,
     [key] text not null, -- уникальный ключ опции
-    [value] text -- значение опции
-) strict;
+    [value] blob -- значение опции
+);
 
 create unique index [ui_options_key] on [options]([key]);
 
@@ -19,13 +19,10 @@ create table [accounts] ( -- список аккаунтов
     [created] integer, -- дата создания
     [name] text not null, -- название
     [login] text, -- логин
-    [password] text, -- пароль
-    [token] text, -- токен аутентификации
     [expires] integer, -- предполагаемая дата окончания баланса
     [server_limit] integer, -- ограничение по количеству серверов
     [server_current] integer, -- текущее количество серверов
-    [active] integer check([deleted] in (0,1) or [deleted] is null), -- признак активности аккаунта
-    [deleted] integer not null default 0 check([deleted] in (0,1)) -- признак локальной удалённости аккаунта
+    [active] integer check([active] in (0,1) or [active] is null) -- признак активности аккаунта
 ) strict;
 
 create unique index [ui_accounts_remote_id] on [accounts]([remote_id]);

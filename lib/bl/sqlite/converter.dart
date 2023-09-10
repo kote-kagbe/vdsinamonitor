@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:sqlite3/sqlite3.dart';
-import 'package:vdsinamonitor/bl/logger.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
@@ -21,10 +20,9 @@ class SQLiteDatabaseConverter {
   final Database _db;
   final String _dbName;
   int _version = 0, _subVersion = 0;
-  final CustomLogger _logger;
+  final _logger = logger.custom('SQLiteDatabaseConverter');
 
-  SQLiteDatabaseConverter(this._db, this._dbName)
-      : _logger = logger.custom('SQLiteDatabaseConverter');
+  SQLiteDatabaseConverter(this._db, this._dbName);
 
   void _prepare() {
     final test = _db.select('''
@@ -97,8 +95,8 @@ class SQLiteDatabaseConverter {
     return (version: _version, subversion: _subVersion);
   }
 
-  Future<TResultEx> _applyConverter(ByteData code) {
-    final Completer<TResultEx> completer = Completer();
+  Future<ResultEx> _applyConverter(ByteData code) {
+    final Completer<ResultEx> completer = Completer();
 
     int counter = 1;
     final List<String> request = [];

@@ -2,14 +2,17 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:sqlite3/open.dart' as sqlite_open;
+import 'package:vdsinamonitor/globals/intercom.dart';
 
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/bl/sqlite/converter.dart';
 import 'package:vdsinamonitor/globals/utils.dart';
+import 'package:vdsinamonitor/bl/logger.dart';
 
 typedef OSOverride = ({
   sqlite_open.OperatingSystem os,
@@ -31,6 +34,9 @@ class SQLiteDatabase {
   final bool _reset;
   final List<OSOverride>? _overrides;
   final Queue<TransactionBlock> _transactionQueue = Queue<TransactionBlock>();
+  final CustomLogger _logger;
+  static final Finalizer<sqlite3.Database?> _finalizer =
+      Finalizer((db) => db?.dispose());
 
   SQLiteDatabase({
     String? path = '',
@@ -42,62 +48,71 @@ class SQLiteDatabase {
         _name = name,
         _convert = convert,
         _reset = reset,
-        _overrides = overrides;
-
-  Future<TResultEx> openEx() async {
-    return await Future<TResultEx>(() async {
-      try {
-        if (_name.isEmpty) {
-          return resultEx(false,
-              code: ResultCode.rcError, message: 'Не указано имя БД');
-        }
-
-        if (_path != null) {
-          if (_path!.isEmpty) {
-            _path = (await getApplicationSupportDirectory()).path;
-          }
-          bool exists = await Directory(_path!).exists();
-          if (!exists) {
-            return resultEx(false,
-                code: ResultCode.rcError, message: 'Папка БД не существует');
-          }
-        }
-
-        if (_overrides != null) {
-          for (var override in _overrides!) {
-            sqlite_open.open.overrideFor(override.os, override.overrideFunc);
-          }
-        }
-
-        if (_reset) {
-          var resetRes = await resetEx(convert: _convert);
-          if (!resetRes.result) {
-            return resetRes;
-          }
-        }
-
-        final attachResult = _attachDB();
-        if (!attachResult.result) {
-          return attachResult;
-        }
-
-        if (_convert && !_reset) {
-          var cnvRes = await convertEx();
-          if (!cnvRes.result) {
-            return cnvRes;
-          }
-        }
-
-        _db?.execute('PRAGMA foreign_keys = ON;');
-
-        return resultEx(true);
-      } catch (e) {
-        return resultEx(false, code: ResultCode.rcError, message: e.toString());
-      }
-    });
+        _overrides = overrides,
+        _logger = logger.custom('SQLiteDatabase.$name') {
+    _finalizer.attach(this, _db, detach: this);
+    final opts = {
+      'path': _path,
+      'name': _name,
+      'convert': _convert,
+      'reset': _reset,
+      'overrides': _overrides?.length
+    };
+    _logger.info('опции БД: $opts');
   }
 
-  TResultEx _attachDB() {
+  Future<ResultEx> openEx() async {
+    try {
+      if (_name.isEmpty) {
+        return resultEx(false,
+            code: ResultCode.rcError, message: 'Не указано имя БД');
+      }
+
+      if (_path != null) {
+        if (_path!.isEmpty) {
+          _path = (await getApplicationSupportDirectory()).path;
+        }
+        bool exists = await Directory(_path!).exists();
+        if (!exists) {
+          return resultEx(false,
+              code: ResultCode.rcError, message: 'Папка БД не существует');
+        }
+      }
+
+      if (_overrides != null) {
+        for (var override in _overrides!) {
+          sqlite_open.open.overrideFor(override.os, override.overrideFunc);
+        }
+      }
+
+      if (_reset) {
+        var resetRes = await resetEx(convert: _convert);
+        if (!resetRes.result) {
+          return resetRes;
+        }
+      }
+
+      final attachResult = _attachDB();
+      if (!attachResult.result) {
+        return attachResult;
+      }
+
+      if (_convert && !_reset) {
+        var cnvRes = await convertEx();
+        if (!cnvRes.result) {
+          return cnvRes;
+        }
+      }
+
+      _db?.execute('PRAGMA foreign_keys = ON;');
+
+      return resultEx(true);
+    } catch (e) {
+      return resultEx(false, code: ResultCode.rcError, message: e.toString());
+    }
+  }
+
+  ResultEx _attachDB() {
     if (_path == null) {
       _db = sqlite3.sqlite3.openInMemory();
     } else {
@@ -119,40 +134,36 @@ class SQLiteDatabase {
   void close() {
     _db?.dispose();
     _db = null;
+    _finalizer.detach(this);
   }
 
-  Future<TResultEx> resetEx({bool convert = true}) async {
-    return await Future<TResultEx>(() async {
-      if (_db != null) {
-        close();
+  Future<ResultEx> resetEx({bool convert = true}) async {
+    if (_db != null) {
+      close();
+    }
+    if (_path != null) {
+      try {
+        await File(path.join(_path!, _name)).delete();
+      } catch (e) {
+        return resultEx(false, code: ResultCode.rcError, message: e.toString());
       }
-      if (_path != null) {
-        try {
-          File(path.join(_path!, _name)).deleteSync();
-        } catch (e) {
-          return resultEx(false,
-              code: ResultCode.rcError, message: e.toString());
-        }
+    }
+    _attachDB();
+    if (convert) {
+      var cnvRes = await convertEx();
+      if (!cnvRes.result) {
+        return cnvRes;
       }
-      _attachDB();
-      if (convert) {
-        var cnvRes = await convertEx();
-        if (!cnvRes.result) {
-          return cnvRes;
-        }
-      }
-      return resultEx(true);
-    });
+    }
+    return resultEx(true);
   }
 
   Future<bool> reset({bool convert = true}) async {
-    return await Future<bool>(() async {
-      var result = await resetEx(convert: convert);
-      return result.result;
-    });
+    var result = await resetEx(convert: convert);
+    return result.result;
   }
 
-  Future<TResultEx> convertEx() async {
+  Future<ResultEx> convertEx() async {
     try {
       final cnvResult = await SQLiteDatabaseConverter(_db!, _name).execute();
       return resultEx((cnvResult.version ?? 0) > 0);
@@ -162,10 +173,8 @@ class SQLiteDatabase {
   }
 
   Future<bool> convert() async {
-    return await Future<bool>(() async {
-      var result = await convertEx();
-      return result.result;
-    });
+    var result = await convertEx();
+    return result.result;
   }
 
   void execute(String query, [List<Object?> params = const []]) {

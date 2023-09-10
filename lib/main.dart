@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:vdsinamonitor/bl/logger.dart';
 import 'dart:async';
 
 import 'package:vdsinamonitor/globals/consts/colors.dart';
 import 'package:vdsinamonitor/globals/consts/strings.dart';
+import 'package:vdsinamonitor/globals/intercom.dart';
 import 'package:vdsinamonitor/ui/splash.dart';
 import 'package:vdsinamonitor/globals/typedefs.dart';
 import 'package:vdsinamonitor/bl/initialization.dart';
 
 void main() {
-  Completer<TResultEx> completer = Completer();
+  Completer<ResultEx> completer = Completer();
   runApp(VDSinaApplication(completer));
+  Logger.logLevel = LogType.ltINFO;
   initialize(completer);
 }
 
 class VDSinaApplication extends StatelessWidget {
-  final Completer<TResultEx> _completer;
+  final Completer<ResultEx> _completer;
 
-  const VDSinaApplication(Completer<TResultEx> completer, {super.key})
+  const VDSinaApplication(Completer<ResultEx> completer, {super.key})
       : _completer = completer;
 
   @override
